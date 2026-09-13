@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מאמן חשבון לילדים</title>
+  <style>
+    body {
+      font-family: Arial, "Noto Sans Hebrew", sans-serif;
+      background: #f5f7fb;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      width: min(92vw, 600px);
+      background: white;
+      border-radius: 22px;
+      padding: 34px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.10);
+      text-align: center;
+    }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { font-size: 1.5rem; }
+    .menu button, #checkBtn, #voiceBtn, #restartBtn, #menuBtn {
+      font-size: 1.25rem;
+      padding: 13px 22px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      margin: 8px;
+    }
+    .menu button { background: #222; color: white; min-width: 220px; }
+    #voiceBtn { background: #e9eef8; }
+    #checkBtn { background: #222; color: white; }
+    #restartBtn, #menuBtn { background: #e9eef8; }
+    .progress { font-size: 1.1rem; margin-bottom: 20px; }
+    .question { font-size: 3.2rem; font-weight: bold; margin: 28px 0; }
+    input {
+      font-size: 2.2rem;
+      width: 120px;
+      text-align: center;
+      padding: 10px;
+      border: 2px solid #bbb;
+      border-radius: 12px;
+    }
+    .feedback {
+      min-height: 48px;
+      margin-top: 16px;
+      font-size: 1.45rem;
+      font-weight: bold;
+    }
+    .heard {
+      min-height: 30px;
+      margin-top: 8px;
+      color: #555;
+      font-size: 1.05rem;
+    }
+    .summary { font-size: 1.5rem; line-height: 1.8; }
+    .small { font-size: .95rem; color: #666; margin-top: 18px; }
+    .status { font-size: 1rem; color: #555; margin-top: 8px; min-height: 24px; }
+  </style>
+
+<meta name="NetsparkQuiltingResult" total-length="11499" removed="0" rules-found="w3509,w11400,w16585,w26891,w8931,w6522,w2656" />
+</head>
+<body>
+  <div class="card">
+    <h1>מאמן חשבון לילדים</h1>
+
+    <div id="menu" class="menu">
+      <h2>בחר שלב</h2>
+      <button data-level="1">שלב 1 — חיבור עד 5</button><br>
+      <button data-level="2">שלב 2 — חיבור עד 10</button>
+      <div class="small">אפשר לענות בקול או להקליד מספר</div>
+    </div>
+
+    <div id="game" hidden>
+      <div class="progress" id="progress"></div>
+      <div class="question" id="question"></div>
+
+      <button id="voiceBtn">🎤 תשובה בקול</button>
+      <div class="status" id="voiceStatus"></div>
+      <div class="heard" id="heard"></div>
+
+      <input id="answer" type="number" min="0" max="10" inputmode="numeric" aria-label="תשובה" />
+      <br />
+      <button id="checkBtn">בדיקה</button>
+
+      <div class="feedback" id="feedback"></div>
+      <div class="small" id="levelLabel"></div>
+    </div>
+
+    <div id="finish" hidden>
+      <div class="summary" id="summary"></div>
+      <button id="restartBtn">התחלה מחדש</button>
+      <button id="menuBtn">בחירת שלב</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const TOTAL = 10;
+  let level = 1;
+  let index = 0;
+  let correct = 0;
+  let attempts = 0;
+  let current = null;
+  let recognition = null;
+  let recognizing = false;
+
+  const menuEl = document.getElementById('menu');
+  const gameEl = document.getElementById('game');
+  const finishEl = document.getElementById('finish');
+  const qEl = document.getElementById('question');
+  const pEl = document.getElementById('progress');
+  const aEl = document.getElementById('answer');
+  const fEl = document.getElementById('feedback');
+  const heardEl = document.getElementById('heard');
+  const voiceStatusEl = document.getElementById('voiceStatus');
+  const levelLabelEl = document.getElementById('levelLabel');
+  const checkBtn = document.getElementById('checkBtn');
+  const voiceBtn = document.getElementById('voiceBtn');
+  const summaryEl = document.getElementById('summary');
+
+  const numberWords = {
+    "אפס": 0, "אחת": 1, "אחד": 1,
+    "שתיים": 2, "שניים": 2, "שתי": 2, "שני": 2,
+    "שלוש": 3, "שלושה": 3,
+    "ארבע": 4, "ארבעה": 4,
+    "חמש": 5, "חמישה": 5,
+    "שש": 6, "שישה": 6,
+    "שבע": 7, "שבעה": 7,
+    "שמונה": 8,
+    "תשע": 9, "תשעה": 9,
+    "עשר": 10, "עשרה": 10
+  };
+
+  function hebrewNumber(n) {
+    return ['אפס','אחת','שתיים','שלוש','ארבע','חמש','שש','שבע','שמונה','תשע','עשר'][n] || String(n);
+  }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'he-IL';
+    u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  }
+
+  function randomQuestion() {
+    const max = level === 1 ? 5 : 10;
+    let a, b, sum;
+    do {
+      a = Math.floor(Math.random() * (max - 1)) + 1;
+      b = Math.floor(Math.random() * (max - 1)) + 1;
+      sum = a + b;
+    } while (sum > max || (level === 2 && sum <= 5));
+    return { a, b, answer: sum };
+  }
+
+  function ask() {
+    attempts = 0;
+    current = randomQuestion();
+    pEl.textContent = `שאלה ${index + 1} מתוך ${TOTAL}`;
+    qEl.textContent = `${current.a} + ${current.b} = ?`;
+    fEl.textContent = '';
+    heardEl.textContent = '';
+    voiceStatusEl.textContent = '';
+    aEl.value = '';
+    aEl.focus();
+    speak(`כמה זה ${hebrewNumber(current.a)} ועוד ${hebrewNumber(current.b)}?`);
+  }
+
+  function next() {
+    index++;
+    if (index >= TOTAL) {
+      finish();
+      return;
+    }
+    setTimeout(ask, 900);
+  }
+
+  function checkAnswer(value) {
+    if (Number.isNaN(value)) {
+      fEl.textContent = 'לא הבנתי את התשובה';
+      speak('לא הבנתי את התשובה');
+      return;
+    }
+
+    attempts++;
+
+    if (value === current.answer) {
+      correct++;
+      fEl.textContent = 'נכון! כל הכבוד!';
+      speak('נכון! כל הכבוד!');
+      disableInput(true);
+      setTimeout(() => {
+        disableInput(false);
+        next();
+      }, 1000);
+    } else if (attempts < 3) {
+      fEl.textContent = 'לא נכון. נסה שוב.';
+      speak('לא נכון. נסה שוב.');
+      aEl.select();
+    } else {
+      fEl.textContent = `התשובה הנכונה היא ${current.answer}`;
+      speak(`התשובה הנכונה היא ${hebrewNumber(current.answer)}`);
+      disableInput(true);
+      setTimeout(() => {
+        disableInput(false);
+        next();
+      }, 1500);
+    }
+  }
+
+  function disableInput(disabled) {
+    aEl.disabled = disabled;
+    checkBtn.disabled = disabled;
+    voiceBtn.disabled = disabled;
+  }
+
+  function parseSpokenAnswer(text) {
+    const cleaned = text.trim().replace(/[.,!?]/g, '');
+    const digitMatch = cleaned.match(/\d+/);
+    if (digitMatch) return Number(digitMatch[0]);
+
+    if (numberWords.hasOwnProperty(cleaned)) return numberWords[cleaned];
+
+    for (const [word, value] of Object.entries(numberWords)) {
+      if (cleaned.includes(word)) return value;
+    }
+    return NaN;
+  }
+
+  function setupRecognition() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      voiceBtn.disabled = true;
+      voiceStatusEl.textContent = 'זיהוי קולי אינו נתמך בדפדפן הזה';
+      return;
+    }
+
+    recognition = new SR();
+    recognition.lang = 'he-IL';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 3;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      recognizing = true;
+      voiceStatusEl.textContent = 'מקשיב...';
+      heardEl.textContent = '';
+    };
+
+    recognition.onend = () => {
+      recognizing = false;
+      if (voiceStatusEl.textContent === 'מקשיב...') {
+        voiceStatusEl.textContent = '';
+      }
+    };
+
+    recognition.onerror = (event) => {
+      recognizing = false;
+      voiceStatusEl.textContent = 'לא הצלחתי לשמוע. נסה שוב.';
+      if (event.error === 'not-allowed') {
+        voiceStatusEl.textContent = 'יש לאשר גישה למיקרופון בדפדפן';
+      }
+    };
+
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript;
+      heardEl.textContent = `שמעתי: ${text}`;
+      voiceStatusEl.textContent = '';
+      const value = parseSpokenAnswer(text);
+      if (!Number.isNaN(value)) {
+        aEl.value = value;
+        setTimeout(() => checkAnswer(value), 250);
+      } else {
+        fEl.textContent = 'לא הבנתי את המספר. נסה שוב.';
+        speak('לא הבנתי את המספר. נסה שוב.');
+      }
+    };
+  }
+
+  function startVoice() {
+    if (!recognition) {
+      setupRecognition();
+      if (!recognition) return;
+    }
+    if (recognizing) return;
+
+    try {
+      recognition.start();
+    } catch (e) {
+      voiceStatusEl.textContent = 'נסה שוב בעוד רגע';
+    }
+  }
+
+  function startLevel(selectedLevel) {
+    level = selectedLevel;
+    index = 0;
+    correct = 0;
+    menuEl.hidden = true;
+    finishEl.hidden = true;
+    gameEl.hidden = false;
+    levelLabelEl.textContent = level === 1 ? 'שלב 1: חיבור עד 5' : 'שלב 2: חיבור מ-5 עד 10';
+    ask();
+  }
+
+  function finish() {
+    gameEl.hidden = true;
+    finishEl.hidden = false;
+    summaryEl.innerHTML =
+      `<strong>סיימנו!</strong><br>` +
+      `פתרת נכון ${correct} מתוך ${TOTAL} שאלות.`;
+    speak(`סיימנו. פתרת נכון ${correct} מתוך ${TOTAL} שאלות.`);
+  }
+
+  function backToMenu() {
+    gameEl.hidden = true;
+    finishEl.hidden = true;
+    menuEl.hidden = false;
+  }
+
+  document.querySelectorAll('[data-level]').forEach(btn => {
+    btn.addEventListener('click', () => startLevel(Number(btn.dataset.level)));
+  });
+
+  checkBtn.addEventListener('click', () => {
+    if (aEl.value === '') {
+      fEl.textContent = 'נא להקליד תשובה';
+      speak('נא להקליד תשובה');
+      return;
+    }
+    checkAnswer(Number(aEl.value));
+  });
+
+  voiceBtn.addEventListener('click', startVoice);
+
+  aEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') checkBtn.click();
+  });
+
+  document.getElementById('restartBtn').addEventListener('click', () => startLevel(level));
+  document.getElementById('menuBtn').addEventListener('click', backToMenu);
+
+  setupRecognition();
+})();
+</script>
+<input type='hidden' name='ntsp_block_page' value='https://safepage.neto.net.il/?a=block/block1&level=-30&url=http%3A%2F%2Fchatgpt.com%2Fbackend-api%2Festuary%2Fcontent%3Fid%3Dfile_000000003c9c81f4a51c23ed7e50526e%26fn%3Darithmetic_trainer_hebrew_v2_voice.html%26cd%3Dattachment%26ts%3D497036%26p%3Dfs%26cid%3D1%26sig%3D5383bc6ca308085ab242da6fe52f5ab91316a0cc10be6b48416f4146693d163c%26v%3D0&user_id=477232&sigid=8c648d50edd024b1cf1198d3b42c3fc8f7eaf593e5c424278bcad028951035c0&startm=201902&keyword=&referer=https%3A%2F%2Fchatgpt.com%2Fc%2F6aa6e565-aaf4-83eb-a2dd-6f33497edd9a&category=24&cause=Quiltingjs'/><input type='hidden' name='ntsp_is_etrog' value='0'/><input type='hidden' name='ntsp_url_category' value='24'/><input type='hidden' name='ntsp_quilting' value='3'/><input type='hidden' name='ntsp_media_level' value='-30'/><input type='hidden' name='ntsp_user_level' value='-30'/><input type='hidden' name='ntsp_url_level' value='20'/><input type='hidden' name='ntsp_block_wa_status' value='0'/><script src='/jsQuilting/server/jsDict_utf8.js?v=1&k=23898278c1850f536d688db3614128a0' type='text/javascript' defer></script></body>
+</html>
