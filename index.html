@@ -10,9 +10,9 @@
       background: #f5f7fb;
       margin: 0;
       min-height: 100vh;
-      display: flex;
+      display: flex;А
       align-items: center;
-      justify-content: center;
+      justify-content: center;А
     }
     .card {
       width: min(92vw, 600px);
@@ -110,6 +110,7 @@
   let recognition = null;
   let recognizing = false;
   let voiceMode = false;
+  let restartVoiceAfterEnd = false;
   const menuEl = document.getElementById('menu');
   const gameEl = document.getElementById('game');
   const finishEl = document.getElementById('finish');
@@ -220,7 +221,9 @@
       }, 1000);
     } else if (attempts < 3) {
       fEl.textContent = 'לא נכון. נסה שוב.';
-      speak('לא נכון. נסה שוב.');
+      speak('לא נכון. נסה שוב.', () => {
+          resumeVoice();
+      });
       aEl.select();
     } else {
       fEl.textContent = `התשובה הנכונה היא ${current.answer}`;
@@ -273,10 +276,16 @@
     };
 
     recognition.onend = () => {
-      recognizing = false;
-      if (voiceStatusEl.textContent === 'מקשיב...') {
-        voiceStatusEl.textContent = '';
-      }
+        recognizing = false;
+    
+        if (voiceStatusEl.textContent === 'מקשיב...') {
+            voiceStatusEl.textContent = '';
+        }
+    
+        if (voiceMode && restartVoiceAfterEnd) {
+            restartVoiceAfterEnd = false;
+            setTimeout(startVoice, 300);
+        }
     };
 
     recognition.onerror = (event) => {
@@ -312,13 +321,22 @@
     } else {
         heardEl.textContent = 'שמעתי: ' + recognizedTexts.join(' / ');
         fEl.textContent = 'לא הבנתי את המספר. נסה שוב.';
-        speak('לא הבנתי את המספר. נסה שוב.', () => {
-            if (voiceMode) startVoice();
+        speak('לא נכון. נסה שוב.', () => {
+            resumeVoice();
         });
     }
 };
   }
-
+  function resumeVoice() {
+      if (!voiceMode) return;
+  
+      if (recognizing) {
+          restartVoiceAfterEnd = true;
+      } else {
+          restartVoiceAfterEnd = false;
+          setTimeout(startVoice, 300);
+      }
+  }
   function startVoice() {
     if (!recognition) {
       setupRecognition();
