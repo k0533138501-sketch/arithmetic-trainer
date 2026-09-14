@@ -246,7 +246,7 @@
     recognition = new SR();
     recognition.lang = 'he-IL';
     recognition.interimResults = false;
-    recognition.maxAlternatives = 3;
+    recognition.maxAlternatives = 5;
     recognition.continuous = false;
 
     recognition.onstart = () => {
@@ -270,19 +270,34 @@
       }
     };
 
-    recognition.onresult = (event) => {
-      const text = event.results[0][0].transcript;
-      heardEl.textContent = `שמעתי: ${text}`;
-      voiceStatusEl.textContent = '';
-      const value = parseSpokenAnswer(text);
-      if (!Number.isNaN(value)) {
-        aEl.value = value;
-        setTimeout(() => checkAnswer(value), 250);
-      } else {
+  recognition.onresult = (event) => {
+    voiceStatusEl.textContent = '';
+
+    let recognizedTexts = [];
+    let matchedValue = NaN;
+
+    for (let i = 0; i < event.results[0].length; i++) {
+        const text = event.results[0][i].transcript.trim();
+        recognizedTexts.push(text);
+
+        const value = parseSpokenAnswer(text);
+
+        if (!Number.isNaN(value)) {
+            matchedValue = value;
+            heardEl.textContent = 'שמעתי: ' + text;
+            break;
+        }
+    }
+
+    if (!Number.isNaN(matchedValue)) {
+        aEl.value = matchedValue;
+        setTimeout(() => checkAnswer(matchedValue), 250);
+    } else {
+        heardEl.textContent = 'שמעתי: ' + recognizedTexts.join(' / ');
         fEl.textContent = 'לא הבנתי את המספר. נסה שוב.';
         speak('לא הבנתי את המספר. נסה שוב.');
-      }
-    };
+    }
+};
   }
 
   function startVoice() {
