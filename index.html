@@ -109,7 +109,7 @@
   let current = null;
   let recognition = null;
   let recognizing = false;
-
+  let voiceMode = false;
   const menuEl = document.getElementById('menu');
   const gameEl = document.getElementById('game');
   const finishEl = document.getElementById('finish');
@@ -141,14 +141,25 @@
     return ['אפס','אחת','שתיים','שלוש','ארבע','חמש','שש','שבע','שמונה','תשע','עשר'][n] || String(n);
   }
 
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
+ function speak(text, onEnd = null) {
+    if (!('speechSynthesis' in window)) {
+        if (onEnd) onEnd();
+        return;
+    }
+
     window.speechSynthesis.cancel();
+
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'he-IL';
     u.rate = 0.9;
+
+    if (onEnd) {
+        u.onend = onEnd;
+        u.onerror = onEnd;
+    }
+
     window.speechSynthesis.speak(u);
-  }
+}
 
   function randomQuestion() {
     const max = level === 1 ? 5 : 10;
@@ -165,13 +176,17 @@
     attempts = 0;
     current = randomQuestion();
     pEl.textContent = `שאלה ${index + 1} מתוך ${TOTAL}`;
-    qEl.textContent = `${current.a} + ${current.b} = ?`;
+    qEl.innerHTML = `<span dir="ltr">?</span> = <span dir="ltr">${current.b}</span> + <span dir="ltr">${current.a}</span>`;
     fEl.textContent = '';
     heardEl.textContent = '';
     voiceStatusEl.textContent = '';
     aEl.value = '';
     aEl.focus();
-    speak(`כמה זה ${hebrewNumber(current.a)} ועוד ${hebrewNumber(current.b)}?`);
+    speak(`כמה זה ${hebrewNumber(current.a)} ועוד ${hebrewNumber(current.b)}?`, () => {
+      if (voiceMode) {
+          setTimeout(startVoice, 250);
+      }
+    });
   }
 
   function next() {
@@ -186,7 +201,9 @@
   function checkAnswer(value) {
     if (Number.isNaN(value)) {
       fEl.textContent = 'לא הבנתי את התשובה';
-      speak('לא הבנתי את התשובה');
+      speak('לא הבנתי את התשובה', () => {
+          if (voiceMode) startVoice();
+      });
       return;
     }
 
@@ -295,7 +312,9 @@
     } else {
         heardEl.textContent = 'שמעתי: ' + recognizedTexts.join(' / ');
         fEl.textContent = 'לא הבנתי את המספר. נסה שוב.';
-        speak('לא הבנתי את המספר. נסה שוב.');
+        speak('לא הבנתי את המספר. נסה שוב.', () => {
+            if (voiceMode) startVoice();
+        });
     }
 };
   }
@@ -313,7 +332,24 @@
       voiceStatusEl.textContent = 'נסה שוב בעוד רגע';
     }
   }
+  function toggleVoiceMode() {
+    voiceMode = !voiceMode;
 
+    if (voiceMode) {
+        voiceBtn.textContent = 'כבה מצב קולי 🔇';
+        voiceStatusEl.textContent = 'מצב קולי פעיל';
+        startVoice();
+    } else {
+        voiceBtn.textContent = 'תשובה בקול 🎤';
+        voiceStatusEl.textContent = '';
+
+        if (recognition && recognizing) {
+            try {
+                recognition.abort();
+            } catch (e) {}
+        }
+    }
+}
   function startLevel(selectedLevel) {
     level = selectedLevel;
     index = 0;
@@ -353,7 +389,7 @@
     checkAnswer(Number(aEl.value));
   });
 
-  voiceBtn.addEventListener('click', startVoice);
+  voiceBtn.addEventListener('click', toggleVoiceMode);
 
   aEl.addEventListener('keydown', e => {
     if (e.key === 'Enter') checkBtn.click();
