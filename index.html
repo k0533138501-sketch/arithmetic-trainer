@@ -309,7 +309,7 @@
     for (let i = 0; i < event.results[0].length; i++) {
         const text = event.results[0][i].transcript.trim();
         recognizedTexts.push(text);
-    
+        console.log('РАСПОЗНАНО:', i + 1, text, 'confidence:', event.results[0][i].confidence);
         const value = parseSpokenAnswer(text);
     
         if (!Number.isNaN(value)) {
