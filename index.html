@@ -289,22 +289,12 @@
     };
 
   recognition.onerror = (event) => {
-      recognizing = false;
-  
-      if (event.error === 'not-allowed') {
-          voiceStatusEl.textContent = 'יש לאשר גישה למיקרופון בדפדפן';
-          return;
-      }
-  
-      if (event.error === 'no-speech') {
-          voiceStatusEl.textContent = 'לא שמעתי. נסה שוב.';
-          if (voiceMode) {
-              setTimeout(startVoice, 500);
-          }
-          return;
-      }
-  
-      voiceStatusEl.textContent = 'לא הצלחתי לשמוע. נסה שוב.';
+    recognizing = false;
+    voiceStatusEl.textContent = 'לא הצלחתי לשמוע. נסה שוב.';
+
+    if (event.error === 'not-allowed') {
+        voiceStatusEl.textContent = 'יש לאשר גישה למיקרופון בדפדפן';
+    }
   };
 
   recognition.onresult = (event) => {
